@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 	"log"
 	"time"
@@ -12,13 +13,10 @@ import (
 func main() {
 
 	enth := flag.String("i", "", "network card ")
-	test := flag.String("test", "", "network card ")
+	filter := flag.String("filter", "", "tcpdump rules")
 	flag.Parse()
-	fmt.Println("enth ", *enth, *test)
-	if *enth == "" {
-		usage()
-	} else {
-		sniffer(*enth)
+	if *enth != "" {
+		sniffer(enth, filter)
 	}
 
 }
@@ -31,9 +29,34 @@ var (
 	handle      *pcap.Handle
 )
 
-func sniffer(networkCard string) {
-	fmt.Println(networkCard)
-	handle, err := pcap.OpenLive(networkCard, buffer, promiscuous, timeout)
+type MyPacket struct {
+	ethernetType string
+	SrcMac       string
+	DstMac       string
+	SrcIp        int32
+	DstIp        int32
+	SrcPort      int32
+	DstPort      int32
+	AppData      []byte
+}
+
+type IpPair struct {
+	SrcIp string
+	DstIp string
+}
+
+type PortPair struct {
+	SrcPort layers.TCPPort
+	DstPort layers.TCPPort
+}
+
+func sniffer(networkCard *string, filter *string) {
+	handle, err := pcap.OpenLive(*networkCard, buffer, promiscuous, timeout)
+
+	if *filter != "" {
+		fmt.Println("filter is ", *filter)
+		handle.SetBPFFilter(*filter)
+	}
 
 	if err != nil {
 		log.Fatal(err)
@@ -43,7 +66,8 @@ func sniffer(networkCard string) {
 
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
-		fmt.Println(packet)
+		//fmt.Println(packet)
+		parsePacket(packet)
 	}
 }
 
@@ -64,5 +88,31 @@ func listDevices() {
 				fmt.Println("IP : ", address.IP)
 			}
 		}
+	}
+}
+
+func parsePacket(packet gopacket.Packet) {
+	ipLayer := packet.Layer(layers.LayerTypeIPv4)
+	if ipLayer != nil {
+		fmt.Println("IPv4 layer detectead")
+		ip, _ := ipLayer.(*layers.IPv4)
+		ipv4Handler(packet, IpPair{ip.SrcIP.String(), ip.DstIP.String()})
+	}
+}
+
+func ipv4Handler(packet gopacket.Packet, ipPair IpPair) {
+	tcpLayer := packet.Layer(layers.LayerTypeTCP)
+	if tcpLayer != nil {
+		tcp, _ := tcpLayer.(*layers.TCP)
+		tcpHandler(packet, ipPair, PortPair{tcp.SrcPort, tcp.DstPort})
+	}
+}
+
+func tcpHandler(packet gopacket.Packet, ipPair IpPair, portPair PortPair) {
+	fmt.Println("port ", portPair)
+	appLayer := packet.ApplicationLayer()
+	if appLayer != nil {
+		fmt.Println("Payload found.")
+		fmt.Printf("%s\n", appLayer.Payload())
 	}
 }
