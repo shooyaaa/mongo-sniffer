@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/binary"
 	"flag"
 	"fmt"
 	"github.com/google/gopacket"
@@ -114,11 +113,8 @@ func tcpHandler(packet gopacket.Packet, ipPair IpPair, portPair PortPair) {
 	//fmt.Println("port ", portPair)
 	appLayer := packet.ApplicationLayer()
 	if appLayer != nil {
-		payload := appLayer.Payload()[:16]
-		header := MsgHeader{}
-		buf := bytes.NewReader(payload)
-		err = binary.Read(buf, binary.LittleEndian, &header)
-		fmt.Println("Payload found.", header)
-		fmt.Printf("Op type : %s\n", OpType(header.OpCode))
+		buf := bytes.NewReader(appLayer.Payload())
+		op := MongoOp{buf, ipPair, portPair}
+		op.decode()
 	}
 }
