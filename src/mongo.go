@@ -10,6 +10,7 @@ type MongoOp struct {
 	Payload *bytes.Reader
 	Ip      IpPair
 	Port    PortPair
+	Header  MsgHeader
 }
 
 //check if payload is valid protocal
@@ -18,9 +19,8 @@ func (o *MongoOp) validate() bool {
 }
 
 func (o *MongoOp) decode() {
-	header := MsgHeader{}
-	o.ReadHeader(&header)
-	switch header.OpCode {
+	o.ReadHeader(&o.Header)
+	switch o.Header.OpCode {
 	case 2004:
 		decodeOpQuery(o)
 	case 2013:
@@ -65,23 +65,34 @@ func (m *MongoOp) ReadByte() byte {
 	b := byte(1)
 	err := binary.Read(m.Payload, binary.LittleEndian, &b)
 	if err != nil {
-		panic("error read byte from MongoOp")
+		fmt.Printf("error read byte from MongoOp: %s ", err)
+		panic("111")
 	}
 	return b
+}
+
+func (m *MongoOp) ReadBytes(n uint32) []byte {
+	bts := []byte{}
+
+	for i := uint32(0); i < n; i++ {
+		temp := m.ReadByte()
+		bts = append(bts, temp)
+		//fmt.Printf("%v, %q\n", i, temp)
+	}
+	return bts
 }
 
 func (m *MongoOp) ReadCstr() string {
 	count := 0
 	b := byte(1)
-	bts := [1000]byte{}
+	bts := make([]byte, 1)
 
 	for b != 0 {
 		err := binary.Read(m.Payload, binary.LittleEndian, &b)
 		if err != nil {
-			fmt.Println(err)
 			panic("error read byte from payload")
 		}
-		bts[count] = b
+		bts = append(bts, b)
 		count++
 	}
 
@@ -102,8 +113,15 @@ func (m *MongoOp) ReadUint32() uint32 {
 func decodeOpMsg(m *MongoOp) {
 	msg := OpMsg{}
 	msg.Flags = m.ReadUint32()
-	kind = m.ReadByte()
-	fmt.Printf("op_msg(%q:%q)----(%q:%q), flags:%q\n", m.Ip.SrcIp, m.Port.SrcPort, m.Ip.DstIp, m.Port.DstPort, msg.Flags)
+	kind := m.ReadByte()
+
+	rawBson := uint32(0)
+	if kind == 0 {
+		rawBson = m.ReadUint32()
+		rawDoc := m.ReadBytes(rawBson - 4)
+		fmt.Printf("raw doc %q\n", rawDoc)
+	}
+	fmt.Printf("op_msg[%v](%q:%q)----(%q:%q), bson len:%v\n", m.Header.Len, m.Ip.SrcIp, m.Port.SrcPort, m.Ip.DstIp, m.Port.DstPort, rawBson)
 }
 
 func decodeOpQuery(m *MongoOp) {
@@ -112,7 +130,7 @@ func decodeOpQuery(m *MongoOp) {
 	q.CollectionName = m.ReadCstr()
 	q.NumberToSkip = m.ReadInt32()
 	q.NumberToReturn = m.ReadInt32()
-	fmt.Printf("op_query--->%s\n", q.CollectionName)
+	fmt.Printf("op_query[%v]--->%s\n", m.Header.Len, q.CollectionName)
 }
 
 func (m MsgHeader) OpType() string {

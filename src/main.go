@@ -114,7 +114,7 @@ func tcpHandler(packet gopacket.Packet, ipPair IpPair, portPair PortPair) {
 	appLayer := packet.ApplicationLayer()
 	if appLayer != nil {
 		buf := bytes.NewReader(appLayer.Payload())
-		op := MongoOp{buf, ipPair, portPair}
+		op := MongoOp{buf, ipPair, portPair, MsgHeader{}}
 		op.decode()
 	}
 }
