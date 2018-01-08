@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"gopkg.in/mgo.v2/bson"
+	"unsafe"
 )
 
 type MongoOp struct {
@@ -77,7 +79,7 @@ func (m *MongoOp) ReadBytes(n uint32) []byte {
 	for i := uint32(0); i < n; i++ {
 		temp := m.ReadByte()
 		bts = append(bts, temp)
-		//fmt.Printf("%v, %q\n", i, temp)
+		//fmt.Printf("%v, %q --- %v\n", i, temp, n)
 	}
 	return bts
 }
@@ -115,13 +117,18 @@ func decodeOpMsg(m *MongoOp) {
 	msg.Flags = m.ReadUint32()
 	kind := m.ReadByte()
 
-	rawBson := uint32(0)
+	headerLen := unsafe.Sizeof(m.Header) + unsafe.Sizeof(msg.Flags) + unsafe.Sizeof(kind)
+	fmt.Printf("op_msg[%v](%q:%q)----(%q:%v), bson len:\n", m.Header.Len, m.Ip.SrcIp, m.Port.SrcPort, m.Ip.DstIp, headerLen)
 	if kind == 0 {
-		rawBson = m.ReadUint32()
-		rawDoc := m.ReadBytes(rawBson - 4)
-		fmt.Printf("raw doc %q\n", rawDoc)
+		rawDoc := m.ReadBytes(uint32(m.Header.Len - int32(headerLen)))
+		var rawBson map[string]interface{}
+		err := bson.Unmarshal(rawDoc, &rawBson)
+		if err != nil {
+
+			fmt.Printf("unmarshal error %q\n", err)
+		}
+		fmt.Printf("raw doc %v["databases":[map["name":"admin" "sizeOnDisk":%!q(float64=32768) "empty":%!q(bool=false)] map["empty":%!q(bool=false) "name":"config" "sizeOnDisk":%!q(float64=12288)] map["name":"local" "sizeOnDisk":%!q(float64=65536) "empty":%!q(bool=false)] map["name":"royal_0" "sizeOnDisk":%!q(float64=65536) "empty":%!q(bool=false)] map["name":"royal_1" "sizeOnDisk":%!q(float64=1.036288e+06) "empty":%!q(bool=false)] map["sizeOnDisk":%!q(float64=65536) "empty":%!q(bool=false) "name":"royal_log"] map["empty":%!q(bool=false) "name":"test" "sizeOnDisk":%!q(float64=49152)]] "totalSize":%!q(float64=1.327104e+06) "ok":%!q(float64=1)]\n", rawBson)
 	}
-	fmt.Printf("op_msg[%v](%q:%q)----(%q:%q), bson len:%v\n", m.Header.Len, m.Ip.SrcIp, m.Port.SrcPort, m.Ip.DstIp, m.Port.DstPort, rawBson)
 }
 
 func decodeOpQuery(m *MongoOp) {
