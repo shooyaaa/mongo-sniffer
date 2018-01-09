@@ -127,7 +127,8 @@ func decodeOpMsg(m *MongoOp) {
 
 			fmt.Printf("unmarshal error %q\n", err)
 		}
-		fmt.Printf("raw doc %v["databases":[map["name":"admin" "sizeOnDisk":%!q(float64=32768) "empty":%!q(bool=false)] map["empty":%!q(bool=false) "name":"config" "sizeOnDisk":%!q(float64=12288)] map["name":"local" "sizeOnDisk":%!q(float64=65536) "empty":%!q(bool=false)] map["name":"royal_0" "sizeOnDisk":%!q(float64=65536) "empty":%!q(bool=false)] map["name":"royal_1" "sizeOnDisk":%!q(float64=1.036288e+06) "empty":%!q(bool=false)] map["sizeOnDisk":%!q(float64=65536) "empty":%!q(bool=false) "name":"royal_log"] map["empty":%!q(bool=false) "name":"test" "sizeOnDisk":%!q(float64=49152)]] "totalSize":%!q(float64=1.327104e+06) "ok":%!q(float64=1)]\n", rawBson)
+		BsonToJsonStr(rawBson, 0)
+		fmt.Printf("raw doc %v", rawBson)
 	}
 }
 
