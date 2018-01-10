@@ -121,14 +121,9 @@ func decodeOpMsg(m *MongoOp) {
 	fmt.Printf("op_msg[%v](%q:%q)----(%q:%v), bson len:\n", m.Header.Len, m.Ip.SrcIp, m.Port.SrcPort, m.Ip.DstIp, headerLen)
 	if kind == 0 {
 		rawDoc := m.ReadBytes(uint32(m.Header.Len - int32(headerLen)))
-		var rawBson map[string]interface{}
-		err := bson.Unmarshal(rawDoc, &rawBson)
-		if err != nil {
-
-			fmt.Printf("unmarshal error %q\n", err)
-		}
+		rawBson := DecodeBson(rawDoc)
+		fmt.Printf("raw doc %v\n", rawBson)
 		BsonToJsonStr(rawBson, 0)
-		fmt.Printf("raw doc %v", rawBson)
 	}
 }
 
@@ -139,6 +134,23 @@ func decodeOpQuery(m *MongoOp) {
 	q.NumberToSkip = m.ReadInt32()
 	q.NumberToReturn = m.ReadInt32()
 	fmt.Printf("op_query[%v]--->%s\n", m.Header.Len, q.CollectionName)
+	l := m.ReadUint32()
+	rawDoc := m.ReadBytes(l - 4)
+	bs := make([]byte, 4)
+	binary.LittleEndian.PutUint32(bs, l)
+	rawDoc = append(bs, rawDoc...)
+	rawBson := DecodeBson(rawDoc)
+	BsonToJsonStr(rawBson, 0)
+}
+
+func DecodeBson(b []byte) map[string]interface{} {
+	fmt.Printf("doc  %v", b)
+	var rawBson map[string]interface{}
+	err := bson.Unmarshal(b, &rawBson)
+	if err != nil {
+		fmt.Printf("unmarshal error %q\n", err)
+	}
+	return rawBson
 }
 
 func (m MsgHeader) OpType() string {
