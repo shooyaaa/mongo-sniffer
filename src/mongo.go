@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"gopkg.in/mgo.v2/bson"
-	"unsafe"
 )
 
 type MongoOp struct {
@@ -21,12 +20,15 @@ func (o *MongoOp) validate() bool {
 }
 
 func (o *MongoOp) decode() {
+	//fmt.Printf("all payload %v\n", o.Payload)
 	o.ReadHeader(&o.Header)
 	switch o.Header.OpCode {
 	case 2004:
 		decodeOpQuery(o)
 	case 2013:
 		decodeOpMsg(o)
+	default:
+		fmt.Printf("unhandled type %v", o.Header.OpCode)
 	}
 }
 
@@ -117,12 +119,14 @@ func decodeOpMsg(m *MongoOp) {
 	msg.Flags = m.ReadUint32()
 	kind := m.ReadByte()
 
-	headerLen := unsafe.Sizeof(m.Header) + unsafe.Sizeof(msg.Flags) + unsafe.Sizeof(kind)
-	fmt.Printf("op_msg[%v](%q:%q)----(%q:%v), bson len:\n", m.Header.Len, m.Ip.SrcIp, m.Port.SrcPort, m.Ip.DstIp, headerLen)
+	fmt.Printf("op_msg[%v](%q:%q)----(%q:%v)", m.Header.Len, m.Ip.SrcIp, m.Port.SrcPort, m.Ip.DstIp, m.Port.DstPort)
 	if kind == 0 {
-		rawDoc := m.ReadBytes(uint32(m.Header.Len - int32(headerLen)))
+		sectionLen := m.Payload.Len()
+		fmt.Printf("expect bson len %v\n", sectionLen)
+		rawDoc := m.ReadBytes(uint32(sectionLen))
+		s := rawDoc[:4]
 		rawBson := DecodeBson(rawDoc)
-		fmt.Printf("raw doc %v\n", rawBson)
+		fmt.Printf("raw doc %v[%v]\n", len(rawDoc), s)
 		BsonToJsonStr(rawBson, 0)
 	}
 }
@@ -133,18 +137,17 @@ func decodeOpQuery(m *MongoOp) {
 	q.CollectionName = m.ReadCstr()
 	q.NumberToSkip = m.ReadInt32()
 	q.NumberToReturn = m.ReadInt32()
-	fmt.Printf("op_query[%v]--->%s\n", m.Header.Len, q.CollectionName)
-	l := m.ReadUint32()
-	rawDoc := m.ReadBytes(l - 4)
-	bs := make([]byte, 4)
-	binary.LittleEndian.PutUint32(bs, l)
-	rawDoc = append(bs, rawDoc...)
-	rawBson := DecodeBson(rawDoc)
-	BsonToJsonStr(rawBson, 0)
+	fmt.Printf("op_query[%v]--->%v\n", m.Header.Len, q.CollectionName)
+	sectionLen := m.Payload.Len()
+	if sectionLen != 0 {
+		rawDoc := m.ReadBytes(uint32(sectionLen))
+		rawBson := DecodeBson(rawDoc)
+		BsonToJsonStr(rawBson, 0)
+	}
 }
 
 func DecodeBson(b []byte) map[string]interface{} {
-	fmt.Printf("doc  %v", b)
+	//fmt.Printf("doc  %v", b)
 	var rawBson map[string]interface{}
 	err := bson.Unmarshal(b, &rawBson)
 	if err != nil {
